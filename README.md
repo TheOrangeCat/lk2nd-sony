@@ -47,6 +47,9 @@ See [Chipsets](https://github.com/efidroid/projectmanagement/wiki/%5BReference%5
 page on the EFIDroid wiki for an exact mapping of LK targets to SoCs.
 
 ## Supported devices
+### Sony devices
+- Sony Xperia Z3 Compact - aries (target is `lk2nd-msm8974-aries`)
+- Sony Xperia Z3 - leo (target is `lk2nd-msm8974-leo`)
 ### lk2nd-msm8916
 - Acer Iconia Talk S A1-724 (quirky - see comment in `dts/msm8916/msm8916-mtp-smb1360.dts`)
 - Alcatel OneTouch Idol 3 (4.7) - 6039*
