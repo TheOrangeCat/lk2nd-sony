@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+/dts-v1/;
+
+#include <skeleton.dtsi>
+#include <lk2nd.h>
+
+/ {
+	qcom,msm-id = <194 8 0x10000>;
+	sony-aries {
+		model = "Sony Xperia Z3 Compact";
+		compatible = "sony,xperia-aries", "qcom,msm8974", "lk2nd,device";
+		lk2nd,match-cmdline = "* androidboot.bootloader=s1 *";
+		lk2nd,keys =
+			<KEY_VOLUMEUP   PM_GPIO(5) PM_GPIO_PULL_UP_1_5>,
+			<KEY_VOLUMEDOWN PM_GPIO(2) PM_GPIO_PULL_UP_1_5>;
+	};
+};
+
+#include "msm8974pro-ac-shinano_aries_display.dtsi"
+

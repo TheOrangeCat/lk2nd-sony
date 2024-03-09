@@ -54,7 +54,7 @@ $(BUILDDIR)/%.dtb: %.dts
 	$(NOECHO)dtc -O dtb -i dts -o $@ $@.prep
 
 $(OUTDTIMG): $(DTBS)
-	$(NOECHO)scripts/dtbTool -o $@ $(BUILDDIR)/dts/$(TARGET)
+	$(NOECHO)scripts/dtbTool -o $@ $(BUILDDIR)/dts/$(TARGET)/$(DEVICE)
 
 define mkbootimg
 	$(NOECHO)scripts/mkbootimg \
