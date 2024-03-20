@@ -48,6 +48,34 @@ static inline void parse_arg(const char *str, const char *pre, const char **out)
 		*out = strdup(val);
 }
 
+/* todo: give lk strtoul and nuke this */
+static unsigned hex2unsigned(const char *x)
+{
+    unsigned n = 0;
+
+    while(*x) {
+        switch(*x) {
+        case '0': case '1': case '2': case '3': case '4':
+        case '5': case '6': case '7': case '8': case '9':
+            n = (n << 4) | (*x - '0');
+            break;
+        case 'a': case 'b': case 'c':
+        case 'd': case 'e': case 'f':
+            n = (n << 4) | (*x - 'a' + 10);
+            break;
+        case 'A': case 'B': case 'C':
+        case 'D': case 'E': case 'F':
+            n = (n << 4) | (*x - 'A' + 10);
+            break;
+        default:
+            return n;
+        }
+        x++;
+    }
+
+    return n;
+}
+
 static const char *parse_panel(const char *panel)
 {
 	const char *panel_name;
@@ -76,12 +104,30 @@ static const char *parse_panel(const char *panel)
 	return panel_name;
 }
 
+
+// NOTE: not sure if this is good.
+static unsigned int parse_adc(const char *adc)
+{
+	unsigned int adc_num;
+	const char *adc_nopref;
+	
+	if (!adc)
+		return 0;
+	
+	adc_nopref = strpresuf(adc, "0x");
+
+	adc_num = hex2unsigned(adc_nopref);
+
+	return adc_num;
+}
+
 static void parse_boot_args(void)
 {
 	char *saveptr;
 	char *args = strdup(lk2nd_dev.cmdline);
 	char *arg = strtok_r(args, " ", &saveptr);
 	const char *panel_name = NULL;
+	const char *lcdid_adc = NULL;
 
 	while (arg) {
 		const char *suffix;
@@ -97,6 +143,7 @@ static void parse_boot_args(void)
 			parse_arg(suffix, "panel=", &lk2nd_dev.panel.name);
 		} else {
 			parse_arg(arg, "mdss_mdp.panel=", &panel_name);
+			parse_arg(arg, "lcdid_adc=", &lcdid_adc);
 		}
 
 		arg = strtok_r(NULL, " ", &saveptr);
@@ -105,6 +152,8 @@ static void parse_boot_args(void)
 
 	if (!lk2nd_dev.panel.name)
 		lk2nd_dev.panel.name = parse_panel(panel_name);
+	if (!lk2nd_dev.panel.lcdid_adc)
+		lk2nd_dev.panel.lcdid_adc = parse_adc(lcdid_adc);
 }
 
 static char *strcpy_check_end(char *dst, const char *end, const char *src)
@@ -190,8 +239,8 @@ static bool match_panel(const void *fdt, int offset, const char *panel_name)
 		dprintf(CRITICAL, "No panels defined, cannot match\n");
 		return false;
 	}
-
-	return fdt_subnode_offset(fdt, offset, panel_name) >= 0;
+	
+	return fdt_subnode_offset(fdt, offset, panel_name) >= 0;		
 }
 
 static bool lk2nd_device_match(const void *fdt, int offset)
@@ -218,6 +267,11 @@ static bool lk2nd_device_match(const void *fdt, int offset)
 
 	fdt_getprop(fdt, offset, "lk2nd,match-panel", &len);
 	if (len >= 0) {
+		/* this is awkward. for sony we have to do additional parsing,
+		   so we can't know if the dtb includes our needed panel.
+		   for now if we have an adc value we just assume we can match */
+		if (lk2nd_dev.panel.lcdid_adc)
+			return true;
 		if (!lk2nd_dev.panel.name)
 			return false;
 		return match_panel(fdt, offset, lk2nd_dev.panel.name);
@@ -274,6 +328,67 @@ static void lk2nd_parse_panels(const void *fdt, int offset)
 		dprintf(CRITICAL, "Unsupported panel: %s\n", panel->name);
 		return;
 	}
+
+	new = lkfdt_getprop_str(fdt, offset, "compatible", &new_len);
+	if (!new || new_len < 1)
+		return;
+
+	/* Include space required for null-terminators */
+	panel->compatible_size = ++new_len + ++old_len;
+
+	panel->compatible = malloc(panel->compatible_size);
+	ASSERT(panel->compatible);
+	panel->old_compatible = panel->compatible + new_len;
+
+	strlcpy((char*) panel->compatible, new, new_len);
+	strlcpy((char*) panel->old_compatible, old, old_len);
+
+	if (replace_mode)
+		panel->compatible_size = new_len;
+
+	ts = lkfdt_getprop_str(fdt, offset, "touchscreen-compatible", &ts_len);
+	if (!ts || ts_len < 1)
+		return;
+
+	panel->ts_compatible = malloc(ts_len);
+	ASSERT(panel->ts_compatible);
+	strlcpy((char*) panel->ts_compatible, ts, ts_len + 1);
+
+	dprintf(INFO, "Found touchscreen-compatible: %s\n", panel->ts_compatible);
+}
+
+static void lk2nd_parse_panels_sony(const void *fdt, int offset)
+{
+	struct lk2nd_panel *panel = &lk2nd_dev.panel;
+	const char *old, *new, *ts, *name;
+	int old_len, new_len, ts_len, name_len;
+	bool replace_mode = false;
+	const uint32_t *adc_prop; 
+
+	offset = fdt_subnode_offset(fdt, offset, "panel");
+	if (offset < 0)
+		return;
+
+	old = lkfdt_getprop_str(fdt, offset, "compatible", &old_len);
+	if (!old || old_len < 1)
+		return;
+
+	replace_mode = !!fdt_getprop(fdt, offset, "replace-compatible", NULL);
+	
+	for (offset = fdt_first_subnode(fdt, offset); offset >= 0; offset = fdt_next_subnode(fdt, offset)) {
+		adc_prop = (const uint32_t*)fdt_getprop(fdt, offset, "sony,lcd-id-adc", NULL);
+		if (panel->lcdid_adc >= fdt32_to_cpu(adc_prop[0]) &&
+			panel->lcdid_adc <= fdt32_to_cpu(adc_prop[1])) 
+			break;
+	};
+	if (offset < 0) {
+		dprintf(CRITICAL, "Unsupported panel: %d\n", panel->lcdid_adc);
+		return;
+	}
+	
+	name = fdt_get_name(fdt, offset, &name_len);
+	panel->name = malloc(++name_len);
+	strlcpy((char*) panel->name, name, name_len);
 
 	new = lkfdt_getprop_str(fdt, offset, "compatible", &new_len);
 	if (!new || new_len < 1)
@@ -365,6 +480,8 @@ static void lk2nd_parse_device_node(const void *fdt)
 
 	if (lk2nd_dev.panel.name)
 		lk2nd_parse_panels(fdt, offset);
+	if (lk2nd_dev.panel.lcdid_adc)
+		lk2nd_parse_panels_sony(fdt, offset);
 
 	lk2nd_dev.keymap = lk2nd_parse_keys(fdt, offset);
 

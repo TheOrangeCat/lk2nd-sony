@@ -10,6 +10,7 @@ struct smb1360_battery;
 
 struct lk2nd_panel {
 	const char *name;
+	unsigned int lcdid_adc;
 	const char *old_compatible;
 	const char *compatible;
 	int compatible_size;
