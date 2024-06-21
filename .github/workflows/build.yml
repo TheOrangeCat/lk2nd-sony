@@ -13,25 +13,12 @@ jobs:
       artifacts: |
         build-*/lk.bin
         build-*/lk2nd.img
-  lk2nd:
+  lk2nd-sony:
     needs: lk2nd-msm8916
     uses: ./.github/workflows/lk2nd-matrix.yml
     with:
       project: lk2nd
-      exclude: msm8916  # Already built separately above
+      exclude: msm8916  
       artifacts: |
         build-*/lk.bin
         build-*/lk2nd.img
-
-  lk1st:
-    needs: lk2nd
-    uses: ./.github/workflows/lk2nd-matrix.yml
-    with:
-      project: lk1st
-      artifacts: |
-        build-*/*.mbn
-        build-*/lk.bin
-
-  stock:
-    needs: lk1st
-    uses: ./.github/workflows/stock-matrix.yml
