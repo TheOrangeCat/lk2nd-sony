@@ -253,7 +253,7 @@ void display_default_image_on_screen(void)
 	 */
 	scale_factor = max(1U, min(fb->width, fb->height) / (FONT_WIDTH * MIN_LINE));
 	incr = FONT_HEIGHT * scale_factor;
-	y = fb->height - 3 * incr;
+	y = fb->height / 16 * 13;
 
 	fbcon_clear_msg(y / FONT_HEIGHT, y / FONT_HEIGHT + 3 * scale_factor);
 
